@@ -9,7 +9,7 @@ It defines classes_and_methods
 
 @author:     Chris Willoughby
             
-@copyright:  2014 Home. All rights reserved.
+@copyright:  2014 Chris Willoughby. All rights reserved.
             
 @license:    GPL3.0
 
@@ -32,8 +32,126 @@ DEBUG = 0
 TESTRUN = 0
 PROFILE = 0
 
-def windowfunc(stdscr):
-    pass
+class HexFile:
+    def __init__(self, name):
+        """ Opens to file being analysed, reads it all in, and closes the file.
+        """
+        f = open(name, "rb")
+        # TODO: Should I really do this? Should I read it a chunk at a time?
+        self.fileContents = f.read()
+        f.close()
+
+class HexDescFile:
+    """ This class handles the description file.
+        A description file stores all the info related to the binary file being analysed.
+    """
+    
+    def __init__(self, name, callback=None):
+        """ Takes a filename for the description file and a callback.
+            Opens the description file for appending.
+            Reads in the current contents and calls the given callback passing
+            file offset and type.
+        """
+        self.file = open(name, "a+")
+        
+        # TODO: Is this really the best way to do this? Should I not call readline()
+        # and check for EOF == ""? That woudl be more memory efficient
+        for line in self.file.readlines():
+            pass
+        
+    def Close(self):
+        """Closes the description file.
+        """
+        self.file.close()
+        
+    def MarkAs(self, location, ):
+        """ Assigns a meaning to a particular location in the file being analysed.
+            
+        """
+        
+        # Arbitrary byte stream: fixed length, terminating sequence, length indication
+        # Relative offset to data
+        # Absolute offset to data
+        # data
+        # each will need an ID
+        # extensible
+        
+        
+        pass
+    
+class MainWindow:
+    def __init__(self, hexfile, hexdescfile):
+        # curX and curY store the current location at which to put the cursor
+        self.curX = 0
+        self.curY = 0
+        
+        # is the cursor in the file being analysed, or in the description?
+        self.inHex = True
+        
+        # the current location (absolute offset) within the file being analysed
+        self.hexLoc = 0
+        
+        # initialise the screen and start our event loop
+        curses.wrapper(self.WrappedFunc, hexfile, hexdescfile)
+        
+    def ToggleWindow(self):
+        # if we're in the hex, move to the description, and vice versa
+        if self.inHex:
+            self.inHex = False
+            # save where we are
+            self.savedX = self.curX
+            self.savedY = self.curY
+            
+            # put the cursor on the last line
+            self.curX = self.maxyx[1]
+            self.curY = self.maxyx[0]
+            
+            #self.win.move(self.cury, self.curx)
+        else:
+            self.inHex = True
+            
+            # restore the cursor to where we left off
+            self.curX = self.savedX
+            self.curY = self.savedY
+            
+    def Log(self, logstr):
+        self.win.addstr(0,0,logstr)
+        
+    def WrappedFunc(self, stdscr, hexfile, hexdescfile):
+        self.win = stdscr
+        self.maxyx = self.win.getmaxyx()
+        self.win.addstr(self.curY, self.curX, "show this text")
+        while True:
+            c = stdscr.getch()
+            if c == ord("q"):
+                hexdescfile.Close()
+                break
+            elif c == ord("\t"):
+                self.ToggleWindow()
+                
+            # Cursor movement
+            elif c == curses.KEY_UP:
+                self.Log("UP")
+                # 16 bytes per line, going up a line
+                if self.hexLoc >= 16:
+                    self.hexLoc -= 16
+            elif c == curses.KEY_DOWN:
+                self.Log("DOWN")
+                # 16 bytes per line, going down a line
+                if self.hexLoc < len(hexfile.fileContents) - 16:
+                    self.hexLoc += 16
+            elif c == curses.KEY_LEFT:
+                self.Log("LEFT")
+                if self.hexLoc > 0:
+                    self.hexLoc -= 1
+            elif c == curses.KEY_RIGHT:
+                self.Log("RIGHT")
+                if self.hexLoc < len(hexfile.fileContents):
+                    self.hexLoc += 1
+                
+            # Catch everything else
+            else:
+                self.Log(str(c))
 
 def main(argv=None):
     '''Command line options.'''
@@ -75,17 +193,9 @@ def main(argv=None):
         sys.stderr.write(indent + "  for help use --help")
         return 2
 
-#     stdscr = curses.initscr()
-#     curses.noecho()
-#     curses.cbreak()
-#     stdscr.keypad(1)
-# 
-#     curses.nocbreak()
-#     stdscr.keypad(0)
-#     curses.echo()
-#     curses.endwin()
-
-    curses.wrapper(windowfunc)
+    hexfile = HexFile(opts.infile)
+    hexdescfile = HexDescFile(opts.outfile)
+    mainwindow = MainWindow(hexfile, hexdescfile)
     
 if __name__ == "__main__":
     if DEBUG:
