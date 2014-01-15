@@ -17,6 +17,7 @@ It defines classes_and_methods
 @deffield    updated: Updated
 '''
 
+import struct
 import sys
 import os
 import curses
@@ -40,6 +41,26 @@ class HexFile:
         # TODO: Should I really do this? Should I read it a chunk at a time?
         self.fileContents = f.read()
         f.close()
+        
+    def lineStr(self, lineNum):
+        lineOffset = lineNum * 16
+        if lineOffset > len(self.fileContents):
+            lineOffset = 0 #TODO
+        values = struct.unpack_from("<16B", self.fileContents, lineOffset)
+        
+        returnStr = "%07x" % (lineOffset)
+        endStr = "  "
+        for num, value in enumerate(values):
+            if num % 2 == 0:
+                returnStr += " %02x" % (value)
+            else:
+                returnStr += "%02x" % (value)
+            if 32 <= value <= 126:
+                endStr += chr(value)
+            else:
+                endStr += "."
+        
+        return returnStr + endStr
 
 class HexDescFile:
     """ This class handles the description file.
@@ -115,14 +136,30 @@ class MainWindow:
             self.curY = self.savedY
             
     def Log(self, logstr):
-        self.win.addstr(0,0,logstr)
+        #self.win.addstr(0,0,logstr)
+        pass
         
     def WrappedFunc(self, stdscr, hexfile, hexdescfile):
         self.win = stdscr
+        self.win.scrollok(0)
+        #self.win.addstr(self.curY, self.curX, "lines %d" % (curses.LINES))
+        
+        pad_width = 8 + 16*3 + 18 + 2 # offset + data + chars + border
+        self.hexpad = curses.newpad(curses.LINES - 3, pad_width)
+        self.hexpad.border(0)
+        self.hexpad.scrollok(1)
+        self.hexpad.leaveok(0)
+        self.hexpad.addstr(1,1, hexfile.lineStr(0))
+        self.hexpad.addstr(2,1, hexfile.lineStr(1))
+        self.hexpad.addstr(3,1, hexfile.lineStr(2))
+        self.hexpad.addstr(4,1, hexfile.lineStr(3))
+        self.win.refresh()
+        self.hexpad.refresh(0, 0, 0, 0, curses.LINES - 4, pad_width + 1)
+        
         self.maxyx = self.win.getmaxyx()
-        self.win.addstr(self.curY, self.curX, "show this text")
+        #self.win.addstr(self.curY, self.curX, "show this text")
         while True:
-            c = stdscr.getch()
+            c = self.win.getch()
             if c == ord("q"):
                 hexdescfile.Close()
                 break
@@ -135,6 +172,8 @@ class MainWindow:
                 # 16 bytes per line, going up a line
                 if self.hexLoc >= 16:
                     self.hexLoc -= 16
+                self.curY -= 1
+                self.win.move(self.curY, self.curX)
             elif c == curses.KEY_DOWN:
                 self.Log("DOWN")
                 # 16 bytes per line, going down a line
@@ -146,14 +185,18 @@ class MainWindow:
                 self.Log("LEFT")
                 if self.hexLoc > 0:
                     self.hexLoc -= 1
+                self.curX -= 1
+                self.win.move(self.curY, self.curX)
             elif c == curses.KEY_RIGHT:
                 self.Log("RIGHT")
                 if self.hexLoc < len(hexfile.fileContents):
                     self.hexLoc += 1
-                
+                self.curX += 1
+                self.win.move(self.curY, self.curX)
             # Catch everything else
             else:
                 self.Log(str(c))
+            self.hexpad.cursyncup()
 
 def main(argv=None):
     '''Command line options.'''
