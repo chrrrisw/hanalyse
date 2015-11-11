@@ -19,10 +19,9 @@ It defines:
 
 import argparse
 import os
-import struct
 import sys
-from PyQt5 import QtWidgets
-from qhexedit import QHexEdit
+from PyQt5 import QtWidgets, QtGui
+from QHexEdit import QHexEdit, QHexEditData
 from mainwindow import Ui_MainWindow
 
 __all__ = []
@@ -39,40 +38,10 @@ class HexEdit(QHexEdit):
             self.show_file(filename)
 
     def show_file(self, filename):
-        file = open(filename)
-        data = file.read()
-        self.setData(data)
-        self.setReadOnly(True)
+        hexeditdata = QHexEditData.fromFile(filename)
+        self.setData(hexeditdata)
+        # self.setReadOnly(True)
 
-
-# class HexFile:
-#     def __init__(self, name):
-#         """ Opens to file being analysed, reads it all in, and closes the file.
-#         """
-#         f = open(name, "rb")
-#         # TODO: Should I really do this? Should I read it a chunk at a time?
-#         self.fileContents = f.read()
-#         f.close()
-
-#     def lineStr(self, lineNum):
-#         lineOffset = lineNum * 16
-#         if lineOffset > len(self.fileContents):
-#             lineOffset = 0  #TODO
-#         values = struct.unpack_from("<16B", self.fileContents, lineOffset)
-
-#         returnStr = "%07x" % (lineOffset)
-#         endStr = "  "
-#         for num, value in enumerate(values):
-#             if num % 2 == 0:
-#                 returnStr += " %02x" % (value)
-#             else:
-#                 returnStr += "%02x" % (value)
-#             if 32 <= value <= 126:
-#                 endStr += chr(value)
-#             else:
-#                 endStr += "."
-
-#         return returnStr + endStr
 
 # class HexDescFile:
 #     """ This class handles the description file.
@@ -122,112 +91,44 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         layout_1 = QtWidgets.QHBoxLayout()
         self.frame_1.setLayout(layout_1)
 
-        hex_1 = HexEdit(parent=self.frame_1, filename='hanalyse.py')
-        layout_1.addWidget(hex_1)
+        self.hex_1 = HexEdit(parent=self.frame_1)
+        layout_1.addWidget(self.hex_1)
 
         layout_2 = QtWidgets.QHBoxLayout()
         self.frame_2.setLayout(layout_2)
 
-        hex_2 = HexEdit(parent=self.frame_2, filename='hanalyse.py')
-        layout_2.addWidget(hex_2)
+        self.hex_2 = HexEdit(parent=self.frame_2)
+        layout_2.addWidget(self.hex_2)
 
-# class MainWindow:
-#     def __init__(self, hexfile, hexdescfile):
-#         # curX and curY store the current location at which to put the cursor
-#         self.curX = 0
-#         self.curY = 0
+        self.actionOpen.triggered.connect(self.open_cb)
+        self.actionQuit.triggered.connect(self.quit_cb)
 
-#         # is the cursor in the file being analysed, or in the description?
-#         self.inHex = True
+    def quit_cb(self):
+        print('Quit pressed')
+        self.close()
 
-#         # the current location (absolute offset) within the file being analysed
-#         self.hexLoc = 0
+    def open_file(self, filename):
+        self.hex_1.show_file(filename[0])
+        self.hex_2.show_file(filename[0])
 
-#         # initialise the screen and start our event loop
-#         curses.wrapper(self.WrappedFunc, hexfile, hexdescfile)
+    def open_cb(self):
+        print('Open pressed')
+        filename = QtWidgets.QFileDialog.getOpenFileName(
+            self, 'Load File', '.', '*')
+        if filename[0] != '':
+            self.hex_1.show_file(filename[0])
+            self.hex_2.show_file(filename[0])
+            # self.open_file(filename[0])
 
-#     def ToggleWindow(self):
-#         # if we're in the hex, move to the description, and vice versa
-#         if self.inHex:
-#             self.inHex = False
-#             # save where we are
-#             self.savedX = self.curX
-#             self.savedY = self.curY
+    def allow_close(self):
+        return True
 
-#             # put the cursor on the last line
-#             self.curX = self.maxyx[1]
-#             self.curY = self.maxyx[0]
-
-#             # self.win.move(self.cury, self.curx)
-#         else:
-#             self.inHex = True
-
-#             # restore the cursor to where we left off
-#             self.curX = self.savedX
-#             self.curY = self.savedY
-
-#     def Log(self, logstr):
-#         # self.win.addstr(0,0,logstr)
-#         pass
-
-#     def WrappedFunc(self, stdscr, hexfile, hexdescfile):
-#         self.win = stdscr
-#         self.win.scrollok(0)
-#         # self.win.addstr(self.curY, self.curX, "lines %d" % (curses.LINES))
-
-#         pad_width = 8 + 16*3 + 18 + 2 # offset + data + chars + border
-#         self.hexpad = curses.newpad(curses.LINES - 3, pad_width)
-#         self.hexpad.border(0)
-#         self.hexpad.scrollok(1)
-#         self.hexpad.leaveok(0)
-#         self.hexpad.addstr(1,1, hexfile.lineStr(0))
-#         self.hexpad.addstr(2,1, hexfile.lineStr(1))
-#         self.hexpad.addstr(3,1, hexfile.lineStr(2))
-#         self.hexpad.addstr(4,1, hexfile.lineStr(3))
-#         self.win.refresh()
-#         self.hexpad.refresh(0, 0, 0, 0, curses.LINES - 4, pad_width + 1)
-
-#         self.maxyx = self.win.getmaxyx()
-#         # self.win.addstr(self.curY, self.curX, "show this text")
-#         while True:
-#             c = self.win.getch()
-#             if c == ord("q"):
-#                 hexdescfile.Close()
-#                 break
-#             elif c == ord("\t"):
-#                 self.ToggleWindow()
-
-#             # Cursor movement
-#             elif c == curses.KEY_UP:
-#                 self.Log("UP")
-#                 # 16 bytes per line, going up a line
-#                 if self.hexLoc >= 16:
-#                     self.hexLoc -= 16
-#                 self.curY -= 1
-#                 self.win.move(self.curY, self.curX)
-#             elif c == curses.KEY_DOWN:
-#                 self.Log("DOWN")
-#                 # 16 bytes per line, going down a line
-#                 if self.hexLoc < len(hexfile.fileContents) - 16:
-#                     self.hexLoc += 16
-#                 self.curY += 1
-#                 self.win.move(self.curY, self.curX)
-#             elif c == curses.KEY_LEFT:
-#                 self.Log("LEFT")
-#                 if self.hexLoc > 0:
-#                     self.hexLoc -= 1
-#                 self.curX -= 1
-#                 self.win.move(self.curY, self.curX)
-#             elif c == curses.KEY_RIGHT:
-#                 self.Log("RIGHT")
-#                 if self.hexLoc < len(hexfile.fileContents):
-#                     self.hexLoc += 1
-#                 self.curX += 1
-#                 self.win.move(self.curY, self.curX)
-#             # Catch everything else
-#             else:
-#                 self.Log(str(c))
-#             self.hexpad.cursyncup()
+    def closeEvent(self, event):
+        print('closeEvent')
+        if self.allow_close:
+            event.accept()
+        else:
+            event.ignore()
 
 
 def main():
@@ -270,17 +171,9 @@ Licensed under GPL v3.0.\nhttp://www.gnu.org/licenses/'''
         sys.stderr.write(indent + "  for help use --help")
         return 2
 
-    # hexfile = HexFile(args.infile)
-    # hexdescfile = HexDescFile(args.outfile)
-    # mainwindow = MainWindow(hexfile, hexdescfile)
-
     app = QtWidgets.QApplication(sys.argv)
     main_window = MainWindow()
     main_window.show()
-    # mainWin = HexEdit('hanalyse.py')
-    # mainWin.resize(600, 400)
-    # mainWin.move(300, 300)
-    # mainWin.show()
     sys.exit(app.exec_())
 
 if __name__ == "__main__":
