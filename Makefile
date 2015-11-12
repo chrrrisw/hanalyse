@@ -3,4 +3,4 @@ ui_%.py: %.ui
 
 ui: \
 	ui_mainwindow.py \
-	ui_commentdialog.py
+	ui_tagdialog.py

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>Comment</class>
- <widget class="QDialog" name="Comment">
+ <class>Tag</class>
+ <widget class="QDialog" name="Tag">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -15,9 +15,9 @@
   </property>
   <layout class="QGridLayout" name="gridLayout">
    <item row="0" column="0">
-    <widget class="QLabel" name="comment_label">
+    <widget class="QLabel" name="tag_label">
      <property name="text">
-      <string>Comment</string>
+      <string>Tag</string>
      </property>
     </widget>
    </item>
@@ -66,7 +66,7 @@
     </widget>
    </item>
    <item row="0" column="1">
-    <widget class="QLineEdit" name="comment_lineedit"/>
+    <widget class="QLineEdit" name="tag_lineedit"/>
    </item>
    <item row="1" column="0">
     <widget class="QLabel" name="type_label">
@@ -121,7 +121,7 @@
   <connection>
    <sender>buttonBox</sender>
    <signal>accepted()</signal>
-   <receiver>Comment</receiver>
+   <receiver>Tag</receiver>
    <slot>accept()</slot>
    <hints>
     <hint type="sourcelabel">
@@ -137,7 +137,7 @@
   <connection>
    <sender>buttonBox</sender>
    <signal>rejected()</signal>
-   <receiver>Comment</receiver>
+   <receiver>Tag</receiver>
    <slot>reject()</slot>
    <hints>
     <hint type="sourcelabel">
