@@ -1,0 +1,4 @@
+deprecated
+PY3
+ui_*.py
+__pycache__
