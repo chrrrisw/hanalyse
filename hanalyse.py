@@ -22,7 +22,7 @@ import os
 import sys
 from PyQt5 import QtWidgets, QtGui
 from QHexEdit import QHexEdit, QHexEditData
-from mainwindow import Ui_MainWindow
+from ui_mainwindow import Ui_MainWindow
 
 __all__ = []
 __version__ = 0.1
@@ -37,11 +37,22 @@ class HexEdit(QHexEdit):
         if filename is not None:
             self.show_file(filename)
 
-    def show_file(self, filename):
-        hexeditdata = QHexEditData.fromFile(filename)
-        self.setData(hexeditdata)
-        # self.setReadOnly(True)
+    # Inherited methods
 
+    def contextMenuEvent(self, event):
+        menu = QtWidgets.QMenu(self)
+        commentAction = menu.addAction("Comment")
+        action = menu.exec_(self.mapToGlobal(event.pos()))
+        if action == commentAction:
+            self.add_comment()
+
+    # New class methods
+
+    def add_comment(self):
+        self.commentRange(
+            self.selectionStart(),
+            self.selectionEnd(),
+            "Foo")
 
 # class HexDescFile:
 #     """ This class handles the description file.
@@ -116,8 +127,9 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         filename = QtWidgets.QFileDialog.getOpenFileName(
             self, 'Load File', '.', '*')
         if filename[0] != '':
-            self.hex_1.show_file(filename[0])
-            self.hex_2.show_file(filename[0])
+            hexeditdata = QHexEditData.fromFile(filename[0])
+            self.hex_1.setData(hexeditdata)
+            self.hex_2.setData(hexeditdata)
             # self.open_file(filename[0])
 
     def allow_close(self):
