@@ -20,9 +20,10 @@ It defines:
 import argparse
 import os
 import sys
-from PyQt5 import QtWidgets, QtGui
-from QHexEdit import QHexEdit, QHexEditData
+from PyQt5 import QtWidgets, QtGui, QtCore
+from QHexEdit import QHexEdit, QHexEditData, QHexEditDataReader
 from ui_mainwindow import Ui_MainWindow
+from ui_commentdialog import Ui_Comment
 
 __all__ = []
 __version__ = 0.1
@@ -30,29 +31,51 @@ __date__ = '2014-01-09'
 __updated__ = '2014-01-09'
 
 
-class HexEdit(QHexEdit):
+class MainHexEdit(QHexEdit):
 
-    def __init__(self, parent=None, filename=None):
-        super(HexEdit, self).__init__(parent)
-        if filename is not None:
-            self.show_file(filename)
+    show_offset = QtCore.pyqtSignal('qint64')
+
+    def __init__(self, parent=None):
+        super(MainHexEdit, self).__init__(parent)
+        self.setReadOnly(True)
 
     # Inherited methods
 
-    def contextMenuEvent(self, event):
-        menu = QtWidgets.QMenu(self)
-        commentAction = menu.addAction("Comment")
-        action = menu.exec_(self.mapToGlobal(event.pos()))
-        if action == commentAction:
-            self.add_comment()
+    # def contextMenuEvent(self, event):
+    #     menu = QtWidgets.QMenu(self)
+    #     commentAction = menu.addAction("Comment")
+    #     absOffsetAction = menu.addAction("Show as absolute offset")
+    #     relOffsetAction = menu.addAction("Show as relative offset")
+    #     action = menu.exec_(self.mapToGlobal(event.pos()))
+    #     if action == commentAction:
+    #         self.add_comment()
+    #     elif action == absOffsetAction:
+    #         self.show_absolute_offset()
+    #     elif action == relOffsetAction:
+    #         self.show_relative_offset()
 
     # New class methods
 
     def add_comment(self):
+        print('Cursor pos'.format(self.cursorPos()))
+        print('Selection start'.format(self.selectionStart()))
         self.commentRange(
             self.selectionStart(),
             self.selectionEnd(),
             "Foo")
+
+    def show_absolute_offset(self):
+        self.show_offset.emit(10)
+
+    def show_relative_offset(self):
+        self.show_offset.emit(20)
+
+
+class SlaveHexEdit(QHexEdit):
+
+    def __init__(self, parent=None):
+        super(SlaveHexEdit, self).__init__(parent)
+        self.setReadOnly(True)
 
 # class HexDescFile:
 #     """ This class handles the description file.
@@ -99,38 +122,74 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
         self.setupUi(self)
 
+        # Create a layout and hexedit widget
         layout_1 = QtWidgets.QHBoxLayout()
         self.frame_1.setLayout(layout_1)
-
-        self.hex_1 = HexEdit(parent=self.frame_1)
+        self.hex_1 = MainHexEdit(parent=self.frame_1)
         layout_1.addWidget(self.hex_1)
 
+        # Create a layout and hexedit widget
         layout_2 = QtWidgets.QHBoxLayout()
         self.frame_2.setLayout(layout_2)
-
-        self.hex_2 = HexEdit(parent=self.frame_2)
+        self.hex_2 = SlaveHexEdit(parent=self.frame_2)
         layout_2.addWidget(self.hex_2)
 
+        # Create context menu in hex 1
+        self._commentAction = QtWidgets.QAction(
+            "Comment", None)
+        self._commentAction.triggered.connect(self.tag_cb)
+        self._absOffsetAction = QtWidgets.QAction(
+            "Show as absolute offset", None)
+        self._relOffsetAction = QtWidgets.QAction(
+            "Show as relative offset", None)
+        self.hex_1.addAction(self._commentAction)
+        self.hex_1.addAction(self._absOffsetAction)
+        self.hex_1.addAction(self._relOffsetAction)
+        self.hex_1.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
+
+        # Connect signals to slots
+        self.hex_1.show_offset.connect(self.hex_2.setCursorPos)
+
+        # Connect up the menu
         self.actionOpen.triggered.connect(self.open_cb)
+        self.actionTag.triggered.connect(self.tag_cb)
         self.actionQuit.triggered.connect(self.quit_cb)
 
-    def quit_cb(self):
-        print('Quit pressed')
-        self.close()
+        # Dialogs
+        self._tag_dialog = QtWidgets.QDialog(self)
+        tag_contents = Ui_Comment()
+        tag_contents.setupUi(self._tag_dialog)
 
-    def open_file(self, filename):
-        self.hex_1.show_file(filename[0])
-        self.hex_2.show_file(filename[0])
+        # Internal stuff
+        self._hexeditdata = None
+        self._hexeditdatareader = None
+
+    # def open_file(self, filename):
+    #     self.hex_1.show_file(filename[0])
+    #     self.hex_2.show_file(filename[0])
 
     def open_cb(self):
         print('Open pressed')
         filename = QtWidgets.QFileDialog.getOpenFileName(
             self, 'Load File', '.', '*')
         if filename[0] != '':
-            hexeditdata = QHexEditData.fromFile(filename[0])
-            self.hex_1.setData(hexeditdata)
-            self.hex_2.setData(hexeditdata)
+            self._hexeditdata = QHexEditData.fromFile(filename[0])
+            self._hexeditdatareader = QHexEditDataReader(
+                self._hexeditdata,
+                self)
+            self.hex_1.setData(self._hexeditdata)
+            self.hex_2.setData(self._hexeditdata)
             # self.open_file(filename[0])
+
+    def tag_cb(self):
+        result = self._tag_dialog.exec_()
+
+        if result:
+            pass
+
+    def quit_cb(self):
+        print('Quit pressed')
+        self.close()
 
     def allow_close(self):
         return True
