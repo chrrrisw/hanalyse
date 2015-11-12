@@ -20,6 +20,7 @@ It defines:
 import argparse
 import os
 import sys
+from enum import IntEnum
 from PyQt5 import QtWidgets, QtGui, QtCore
 from QHexEdit import QHexEdit, QHexEditData, QHexEditDataReader
 from ui_mainwindow import Ui_MainWindow
@@ -31,6 +32,53 @@ __date__ = '2014-01-09'
 __updated__ = '2014-01-09'
 
 
+class TagTypes(IntEnum):
+    Char = 1
+    Uint8 = 2
+    Uint16 = 3
+    Uint32 = 4
+    Uint64 = 5
+    Int8 = 6
+    Int16 = 7
+    Int32 = 8
+    Int64 = 9
+    String = 10
+
+
+def uchar_to_uint8(uchar):
+    # 'big' or 'little'
+    return (int.from_bytes(uchar, sys.byteorder, signed=False))
+
+
+def uchar_to_int8(uchar):
+    # 'big' or 'little'
+    return (int.from_bytes(uchar, sys.byteorder, signed=True))
+
+
+TYPEREADERS = {
+    TagTypes.Char: ('at',),
+    TagTypes.Uint8: ('at', uchar_to_uint8),
+    TagTypes.Uint16: ('readUInt16',),
+    TagTypes.Uint32: ('readUInt32',),
+    TagTypes.Uint64: ('readUInt64',),
+    TagTypes.Int8: ('at', uchar_to_int8),
+    TagTypes.Int16: ('readInt16',),
+    TagTypes.Int32: ('readInt32',),
+    TagTypes.Int64: ('readInt64',),
+    TagTypes.String: ('readString',)
+}
+
+
+class Tag(object):
+    def __init__(self):
+        self.parent_tag = None
+        self.identifier = None
+        self.tag_type = None
+        self.tag
+
+HIGHLIGHT_COLOUR = QtGui.QColor(255, 0, 0)
+
+
 class MainHexEdit(QHexEdit):
 
     show_offset = QtCore.pyqtSignal('qint64')
@@ -38,6 +86,27 @@ class MainHexEdit(QHexEdit):
     def __init__(self, parent=None):
         super(MainHexEdit, self).__init__(parent)
         self.setReadOnly(True)
+        self._temp_highlight = None
+        self.positionChanged.connect(self.remove_temp_highlight)
+
+    def add_temp_highlight(self, offset, length):
+        self.remove_temp_highlight(None)
+        self._temp_highlight = (offset, offset + length - 1)
+        self.highlightBackground(
+            self._temp_highlight[0],
+            self._temp_highlight[1],
+            HIGHLIGHT_COLOUR)
+
+    def remove_temp_highlight(self, offset):
+        if self._temp_highlight is not None:
+            self.clearHighlight(
+                self._temp_highlight[0],
+                self._temp_highlight[1])
+            self._temp_highlight = None
+
+    def show_search_result(self, offset, length):
+        self.setCursorPos(offset)
+        self.add_temp_highlight(offset, length)
 
     # Inherited methods
 
@@ -56,19 +125,19 @@ class MainHexEdit(QHexEdit):
 
     # New class methods
 
-    def add_tag(self):
-        print('Cursor pos'.format(self.cursorPos()))
-        print('Selection start'.format(self.selectionStart()))
-        self.commentRange(
-            self.selectionStart(),
-            self.selectionEnd(),
-            "Foo")
+    # def add_tag(self):
+    #     print('Cursor pos'.format(self.cursorPos()))
+    #     print('Selection start'.format(self.selectionStart()))
+    #     self.commentRange(
+    #         self.selectionStart(),
+    #         self.selectionEnd(),
+    #         "Foo")
 
-    def show_absolute_offset(self):
-        self.show_offset.emit(10)
+    # def show_absolute_offset(self):
+    #     self.show_offset.emit(10)
 
-    def show_relative_offset(self):
-        self.show_offset.emit(20)
+    # def show_relative_offset(self):
+    #     self.show_offset.emit(20)
 
 
 class SlaveHexEdit(QHexEdit):
@@ -76,43 +145,6 @@ class SlaveHexEdit(QHexEdit):
     def __init__(self, parent=None):
         super(SlaveHexEdit, self).__init__(parent)
         self.setReadOnly(True)
-
-# class HexDescFile:
-#     """ This class handles the description file.
-#         A description file stores all the info related to the binary file being analysed.
-#     """
-
-#     def __init__(self, name, callback=None):
-#         """ Takes a filename for the description file and a callback.
-#             Opens the description file for appending.
-#             Reads in the current contents and calls the given callback passing
-#             file offset and type.
-#         """
-#         self.file = open(name, "a+")
-
-#         # TODO: Is this really the best way to do this? Should I not call readline()
-#         # and check for EOF == ""? That woudl be more memory efficient
-#         for line in self.file.readlines():
-#             pass
-
-#     def Close(self):
-#         """Closes the description file.
-#         """
-#         self.file.close()
-
-#     def MarkAs(self, location, ):
-#         """ Assigns a meaning to a particular location in the file being analysed.
-
-#         """
-
-#         # Arbitrary byte stream: fixed length, terminating sequence, length indication
-#         # Relative offset to data
-#         # Absolute offset to data
-#         # data
-#         # each will need an ID
-#         # extensible
-
-#         pass
 
 
 class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
@@ -138,14 +170,26 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self._tagAction = QtWidgets.QAction(
             "Tag", None)
         self._tagAction.triggered.connect(self.tag_cb)
+
         self._absOffsetAction = QtWidgets.QAction(
-            "Show as absolute offset", None)
+            "Show absolute offset", None)
+        self._absOffsetAction.triggered.connect(self.show_abs_offset_cb)
+
         self._relOffsetAction = QtWidgets.QAction(
-            "Show as relative offset", None)
+            "Show relative offset", None)
+        self._relOffsetAction.triggered.connect(self.show_rel_offset_cb)
+
         self.hex_1.addAction(self._tagAction)
         self.hex_1.addAction(self._absOffsetAction)
         self.hex_1.addAction(self._relOffsetAction)
         self.hex_1.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
+
+        # Create context menu in hex 2
+        self._findOffset = QtWidgets.QAction(
+            'Find offset', None)
+        self._findOffset.triggered.connect(self.find_offset_cb)
+        self.hex_2.addAction(self._findOffset)
+        self.hex_2.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
 
         # Connect signals to slots
         self.hex_1.show_offset.connect(self.hex_2.setCursorPos)
@@ -157,8 +201,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
         # Dialogs
         self._tag_dialog = QtWidgets.QDialog(self)
-        tag_contents = Ui_Tag()
-        tag_contents.setupUi(self._tag_dialog)
+        self._tag_contents = Ui_Tag()
+        self._tag_contents.setupUi(self._tag_dialog)
 
         # Internal stuff
         self._hexeditdata = None
@@ -169,7 +213,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     #     self.hex_2.show_file(filename[0])
 
     def open_cb(self):
-        print('Open pressed')
         filename = QtWidgets.QFileDialog.getOpenFileName(
             self, 'Load File', '.', '*')
         if filename[0] != '':
@@ -182,20 +225,44 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             # self.open_file(filename[0])
 
     def tag_cb(self):
+        # TODO: Should we get the temp highlight instead of selection?
+        self._tag_contents.extents_start_lineedit.setText(
+            '0x{:08x}'.format(self.hex_1.selectionStart()))
+        self._tag_contents.extents_end_lineedit.setText(
+            '0x{:08x}'.format(self.hex_1.selectionEnd()))
         result = self._tag_dialog.exec_()
 
         if result:
             pass
 
+    def show_abs_offset_cb(self):
+        sel_start = self.hex_1.selectionStart()
+        sel_length = self.hex_1.selectionLength()
+        data = self._hexeditdatareader.read(sel_start, sel_length + 1)
+        print(data)
+        offset = int.from_bytes(data, sys.byteorder, signed=False)
+        self.hex_2.setCursorPos(offset)
+
+    def show_rel_offset_cb(self):
+        pass
+
     def quit_cb(self):
-        print('Quit pressed')
         self.close()
 
     def allow_close(self):
         return True
 
+    def find_offset_cb(self):
+        length = 4
+        current_pos = self.hex_2.cursorPos().to_bytes(
+            length,
+            sys.byteorder,
+            signed=False)
+        found_pos = self._hexeditdatareader.indexOf(current_pos, 0)
+        if found_pos > 0:
+            self.hex_1.show_search_result(found_pos, length)
+
     def closeEvent(self, event):
-        print('closeEvent')
         if self.allow_close:
             event.accept()
         else:
