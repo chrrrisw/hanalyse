@@ -23,7 +23,7 @@ import sys
 from PyQt5 import QtWidgets, QtGui, QtCore
 from QHexEdit import QHexEdit, QHexEditData, QHexEditDataReader
 from ui_mainwindow import Ui_MainWindow
-from ui_commentdialog import Ui_Comment
+from ui_tagdialog import Ui_Tag
 
 __all__ = []
 __version__ = 0.1
@@ -56,7 +56,7 @@ class MainHexEdit(QHexEdit):
 
     # New class methods
 
-    def add_comment(self):
+    def add_tag(self):
         print('Cursor pos'.format(self.cursorPos()))
         print('Selection start'.format(self.selectionStart()))
         self.commentRange(
@@ -135,14 +135,14 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         layout_2.addWidget(self.hex_2)
 
         # Create context menu in hex 1
-        self._commentAction = QtWidgets.QAction(
-            "Comment", None)
-        self._commentAction.triggered.connect(self.tag_cb)
+        self._tagAction = QtWidgets.QAction(
+            "Tag", None)
+        self._tagAction.triggered.connect(self.tag_cb)
         self._absOffsetAction = QtWidgets.QAction(
             "Show as absolute offset", None)
         self._relOffsetAction = QtWidgets.QAction(
             "Show as relative offset", None)
-        self.hex_1.addAction(self._commentAction)
+        self.hex_1.addAction(self._tagAction)
         self.hex_1.addAction(self._absOffsetAction)
         self.hex_1.addAction(self._relOffsetAction)
         self.hex_1.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
@@ -157,7 +157,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
         # Dialogs
         self._tag_dialog = QtWidgets.QDialog(self)
-        tag_contents = Ui_Comment()
+        tag_contents = Ui_Tag()
         tag_contents.setupUi(self._tag_dialog)
 
         # Internal stuff
