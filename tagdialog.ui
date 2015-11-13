@@ -85,57 +85,10 @@
     <widget class="QTextEdit" name="comment_textedit"/>
    </item>
    <item row="3" column="1" colspan="2">
-    <widget class="QComboBox" name="role_combo">
-     <item>
-      <property name="text">
-       <string>file offset</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>count</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>unknown</string>
-      </property>
-     </item>
-    </widget>
+    <widget class="QComboBox" name="role_combo"/>
    </item>
    <item row="2" column="1" colspan="2">
-    <widget class="QComboBox" name="type_combobox">
-     <item>
-      <property name="text">
-       <string>char</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>8-bit unsigned int</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>16-bit unsigned int</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>32-bit unsigned int</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>64-bit unsigned int</string>
-      </property>
-     </item>
-     <item>
-      <property name="text">
-       <string>string</string>
-      </property>
-     </item>
-    </widget>
+    <widget class="QComboBox" name="type_combobox"/>
    </item>
   </layout>
  </widget>
