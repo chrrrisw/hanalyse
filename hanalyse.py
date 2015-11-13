@@ -21,19 +21,31 @@ import argparse
 import os
 import sys
 import uuid
+import yaml
 from enum import IntEnum
 from PyQt5 import QtWidgets, QtGui, QtCore
 from QHexEdit import QHexEdit, QHexEditData, QHexEditDataReader
 from ui_mainwindow import Ui_MainWindow
 from ui_tagdialog import Ui_Tag
 
-__all__ = []
+__all__ = [
+    'TagTypes',
+    'TagRoles',
+    'Tag',
+    'MainHexEdit',
+    'SlaveHexEdit',
+    'MainWindow']
+
 __version__ = 0.1
-__date__ = '2014-01-09'
-__updated__ = '2014-01-09'
+__date__ = '2015-11-13'
+__updated__ = '2015-11-13'
 
 
 class TagTypes(IntEnum):
+
+    '''The type associated with a tag specifies how the data is to be read
+    from the file.'''
+
     Char = 0
     Uint8 = 1
     Uint16 = 2
@@ -44,16 +56,19 @@ class TagTypes(IntEnum):
     Int32 = 7
     Int64 = 8
     String = 9
-    Unknown = 10
+    Array = 10
+    Unknown = 11
 
 
 class TagRoles(IntEnum):
+    '''The role associated with a tag specifies ....'''
     Constant = 0
     Count = 1
     Offset = 2
     Signature = 3
     Size = 4
-    Unknown = 5
+    Data = 5
+    Unknown = 6
 
 
 def uchar_to_uint8(uchar):
@@ -76,7 +91,8 @@ TYPECOLOURS = {
     TagTypes.Int16: QtGui.QColor.fromHsv(180, 127, 255),
     TagTypes.Int32: QtGui.QColor.fromHsv(210, 127, 255),
     TagTypes.Int64: QtGui.QColor.fromHsv(240, 127, 255),
-    TagTypes.String: QtGui.QColor.fromHsv(270, 127, 255)
+    TagTypes.String: QtGui.QColor.fromHsv(270, 127, 255),
+    TagTypes.Array: QtGui.QColor.fromHsv(300, 127, 255),
 }
 
 TYPEREADERS = {
@@ -89,27 +105,34 @@ TYPEREADERS = {
     TagTypes.Int16: ('readInt16',),
     TagTypes.Int32: ('readInt32',),
     TagTypes.Int64: ('readInt64',),
-    TagTypes.String: ('readString',)
+    TagTypes.String: ('readString',),
+    TagTypes.Array: ('readString',),
 }
 
 
 class Tag(object):
-    def __init__(self, parent=None):
-        self._parent_tag = None
+    ''' The Tag object is used to hold the metadata associated with a sequence
+    of bytes in the file.'''
+
+    def __init__(self, **kwargs):
         self._identifier = uuid.uuid4()
-        self._name = None
-        self._start = None
-        self._end = None
-        self._type = None
-        self._role = None
-        self._comment = None
+        self._parent_tag = None
+
+        self.name = kwargs.get('name', '')
+        self.start = kwargs.get('start', 0)
+        self.end = kwargs.get('end', 0)
+        self.type = kwargs.get('type', TagTypes.Unknown)
+        self.role = kwargs.get('role', TagRoles.Unknown)
+        self.comment = kwargs.get('comment', '')
 
     @property
     def identifier(self):
+        '''The unique identifier for the tag.'''
         return self._identifier
 
     @property
     def name(self):
+        '''The human-readable name for a tag.'''
         return self._name
 
     @name.setter
@@ -118,6 +141,9 @@ class Tag(object):
 
     @property
     def start(self):
+        '''The absolute offset to the start of the tag. If set from a
+        string, an attempt is made to interpret the string as a decimal
+        or hexadecimal number.'''
         return self._start
 
     @start.setter
@@ -131,6 +157,9 @@ class Tag(object):
 
     @property
     def end(self):
+        '''The absolute offset to the end of the tag. If set from a
+        string, an attempt is made to interpret the string as a decimal
+        or hexadecimal number.'''
         return self._end
 
     @end.setter
@@ -144,6 +173,7 @@ class Tag(object):
 
     @property
     def type(self):
+        '''The type of data pointed to by the tag.'''
         return self._type
 
     @type.setter
@@ -154,6 +184,7 @@ class Tag(object):
 
     @property
     def role(self):
+        '''The role the tag plays in the file.'''
         return self._role
 
     @role.setter
@@ -164,6 +195,7 @@ class Tag(object):
 
     @property
     def comment(self):
+        '''A textual comment for the tag.'''
         return self._comment
 
     @comment.setter
@@ -187,11 +219,77 @@ class Tag(object):
             self._role.name,
             self._comment)
 
+    # @classmethod
+    # def _iter_fields(cls, as_declared=False):
+    #     bases = cls.mro()[:2]
+    #     if as_declared:
+    #         bases.reverse()
+
+    #     for base in bases:
+    #         fields = base.__dict__.get('fields')
+    #         if fields:
+    #             for field in fields:
+    #                 yield field['name'], field
+
+
+class TagRepresenter(yaml.representer.SafeRepresenter):
+    def represent_tag_object(self, data):
+        # d = []
+        # for name, field in data.__class__._iter_fields(True):
+        #     d.append((name, getattr(data, name)))
+        #     return self.represent_mapping('tag:yaml.org,2002:map', d)
+        d = [
+            ('name', data.name),
+            ('start', data.start),
+            ('end', data.end),
+            ('type', data.type.name),
+            ('role', data.role.name),
+            ('comment', data.comment),
+            ]
+        return self.represent_mapping('tag:yaml.org,2002:map', d)
+
+    def represent_tag_enum(self, data):
+        return self.represent_scalar('tag:yaml.org,2002:str', data.name)
+
+TagRepresenter.add_multi_representer(
+    Tag, TagRepresenter.represent_tag_object)
+
+TagRepresenter.add_multi_representer(
+    IntEnum, TagRepresenter.represent_tag_enum)
+
+
+class TagDumper(
+        yaml.emitter.Emitter,
+        yaml.serializer.Serializer,
+        TagRepresenter,
+        yaml.resolver.Resolver):
+
+    def __init__(
+            self, stream, default_style=None, default_flow_style=None,
+            canonical=None, indent=None, width=None,
+            allow_unicode=None, line_break=None,
+            encoding=None, explicit_start=None, explicit_end=None,
+            version=None, tags=None):
+        yaml.emitter.Emitter.__init__(
+            self, stream, canonical=canonical,
+            indent=indent, width=width,
+            allow_unicode=allow_unicode, line_break=line_break)
+        yaml.serializer.Serializer.__init__(
+            self, encoding=encoding,
+            explicit_start=explicit_start, explicit_end=explicit_end,
+            version=version, tags=tags)
+        TagRepresenter.__init__(
+            self, default_style=default_style,
+            default_flow_style=default_flow_style)
+        yaml.resolver.Resolver.__init__(self)
+
 
 HIGHLIGHT_COLOUR = QtGui.QColor(255, 0, 0)
 
 
 class MainHexEdit(QHexEdit):
+    '''MainHexEdit is the widget that appears on the left hand side of the
+    window. It provides the primary view of the data with all highlighing.'''
 
     show_offset = QtCore.pyqtSignal('qint64')
 
@@ -253,6 +351,8 @@ class MainHexEdit(QHexEdit):
 
 
 class SlaveHexEdit(QHexEdit):
+    '''SlaveHexEdit is the widget that appears on the right hand side of the
+    window.'''
 
     def __init__(self, parent=None):
         super(SlaveHexEdit, self).__init__(parent)
@@ -330,22 +430,34 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self._tag_contents = Ui_Tag()
         self._tag_contents.setupUi(self._tag_dialog)
         for tag_type in TagTypes:
-            self._tag_contents.type_combobox.addItem('')
-            self._tag_contents.type_combobox.setItemText(
+            self._tag_contents.typeComboBox.addItem('')
+            self._tag_contents.typeComboBox.setItemText(
+                tag_type.value,
+                QtCore.QCoreApplication.translate(
+                    self.objectName(), tag_type.name))
+            self._tag_contents.of_combobox.addItem('')
+            self._tag_contents.of_combobox.setItemText(
                 tag_type.value,
                 QtCore.QCoreApplication.translate(
                     self.objectName(), tag_type.name))
         for tag_role in TagRoles:
-            self._tag_contents.role_combo.addItem('')
-            self._tag_contents.role_combo.setItemText(
+            self._tag_contents.role_combobox.addItem('')
+            self._tag_contents.role_combobox.setItemText(
                 tag_role.value,
                 QtCore.QCoreApplication.translate(
                     self.objectName(), tag_role.name))
+        self._tag_contents.typeComboBox.currentIndexChanged['QString'].connect(self.on_typeComboBox_currentIndexChanged)
 
         # Internal stuff
         self._hexeditdata = None
         self._hexeditdatareader = None
         self._tags = []
+
+    def create_tag(self, **kwargs):
+        pass
+
+    def delete_tag(self, tag):
+        pass
 
     @QtCore.pyqtSlot()
     def on_actionOpen_triggered(self):
@@ -354,7 +466,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             parent=self,
             caption='Load File',
             directory='.',
-            filter='*')
+            filter='All files (*)')
         if filename[0] != '':
             self._hexeditdata = QHexEditData.fromFile(filename[0])
             self._hexeditdatareader = QHexEditDataReader(
@@ -362,6 +474,53 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 self)
             self.hex_1.setData(self._hexeditdata)
             self.hex_2.setData(self._hexeditdata)
+
+    @QtCore.pyqtSlot()
+    def on_actionLoadTags_triggered(self):
+        print('on_actionLoadTags_triggered')
+        filename = QtWidgets.QFileDialog.getOpenFileName(
+            parent=self,
+            caption='Load File',
+            directory='.',
+            filter='YAML files (*.yaml);;All files (*)')
+        if filename[0] != '':
+            load_file = open(filename[0])
+            tags = yaml.safe_load(load_file)
+            load_file.close()
+            self._tags = []
+            for tag in tags:
+                print(tag)
+                new_tag = Tag(**tag)
+                print(new_tag)
+
+                # Store it
+                self._tags.append(new_tag)
+
+                # Colour it
+                self.hex_1.highlightBackground(
+                    new_tag.start,
+                    new_tag.end,
+                    TYPECOLOURS[new_tag.type])
+
+                # Comment it
+                self.hex_1.commentRange(
+                    new_tag.start,
+                    new_tag.end,
+                    new_tag.name)
+
+
+    @QtCore.pyqtSlot()
+    def on_actionSaveTags_triggered(self):
+        print('on_actionSaveTags_triggered')
+        filename = QtWidgets.QFileDialog.getSaveFileName(
+            parent=self,
+            caption='Load File',
+            directory='.',
+            filter='YAML files (*.yaml)')
+        if filename[0] != '':
+            save_file = open(filename[0], 'w')
+            yaml.dump(self._tags, save_file, Dumper=TagDumper)
+            save_file.close()
 
     @QtCore.pyqtSlot()
     def on_actionTag_triggered(self):
@@ -374,22 +533,37 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             result = self._tag_dialog.exec_()
 
             if result:
-                new_tag = Tag()
-                new_tag.name = self._tag_contents.tag_lineedit.text()
-                new_tag.start = self._tag_contents.extents_start_lineedit.text()
-                new_tag.end = self._tag_contents.extents_end_lineedit.text()
-                new_tag.type = self._tag_contents.type_combobox.currentText()
-                new_tag.role = self._tag_contents.role_combo.currentText()
-                new_tag.comment = self._tag_contents.comment_textedit.toPlainText()
+                new_tag = Tag(
+                    name=self._tag_contents.tag_lineedit.text(),
+                    start=self._tag_contents.extents_start_lineedit.text(),
+                    end=self._tag_contents.extents_end_lineedit.text(),
+                    type=self._tag_contents.typeComboBox.currentText(),
+                    role=self._tag_contents.role_combobox.currentText(),
+                    comment=self._tag_contents.comment_textedit.toPlainText(),
+                    )
 
                 # Store it
                 self._tags.append(new_tag)
 
-                # TODO: Colour it
+                if new_tag.role == TagRoles.Count:
+                    # Add it to the count combobox
+                    self._tag_contents.countComboBox.addItem('')
+                    self._tag_contents.countComboBox.setItemText(
+                        self._tag_contents.countComboBox.count() - 1,
+                        QtCore.QCoreApplication.translate(
+                            self.objectName(), new_tag.name))
+
+                # Colour it
                 self.hex_1.highlightBackground(
                     new_tag.start,
                     new_tag.end,
                     TYPECOLOURS[new_tag.type])
+
+                # Comment it
+                self.hex_1.commentRange(
+                    new_tag.start,
+                    new_tag.end,
+                    new_tag.name)
 
     @QtCore.pyqtSlot()
     def on_actionQuit_triggered(self):
@@ -409,6 +583,20 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def on_actionShowSlave_triggered(self, checked):
         '''Called on user triggering the action, not on programmatic change.'''
         print('on_actionShowSlave_triggered')
+
+    @QtCore.pyqtSlot('QString')
+    def on_typeComboBox_currentIndexChanged(self, text):
+        print('on_typeComboBox_currentIndexChanged', text)
+        if text == 'Array':
+            self._tag_contents.of_combobox.setEnabled(True)
+            self._tag_contents.of_label.setEnabled(True)
+            self._tag_contents.countComboBox.setEnabled(True)
+            self._tag_contents.count_label.setEnabled(True)
+        else:
+            self._tag_contents.of_combobox.setEnabled(False)
+            self._tag_contents.of_label.setEnabled(False)
+            self._tag_contents.countComboBox.setEnabled(False)
+            self._tag_contents.count_label.setEnabled(False)
 
     def show_abs_offset_cb(self):
         if self._hexeditdatareader is not None:
