@@ -109,6 +109,16 @@ TYPEREADERS = {
     TagTypes.Array: ('readString',),
 }
 
+ROLECOLOURS = {
+    TagRoles.Constant: QtGui.QColor.fromHsv(0, 127, 255),
+    TagRoles.Count: QtGui.QColor.fromHsv(30, 127, 255),
+    TagRoles.Offset: QtGui.QColor.fromHsv(60, 127, 255),
+    TagRoles.Signature: QtGui.QColor.fromHsv(90, 127, 255),
+    TagRoles.Size: QtGui.QColor.fromHsv(120, 127, 255),
+    TagRoles.Data: QtGui.QColor.fromHsv(150, 127, 255),
+    TagRoles.Unknown: QtGui.QColor.fromHsv(180, 127, 255),
+}
+
 
 class Tag(object):
     ''' The Tag object is used to hold the metadata associated with a sequence
@@ -372,7 +382,7 @@ def create_action(parent, name, text, shortcut=None):
 
 class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, filename=None, tagfile=None):
         super(MainWindow, self).__init__(parent)
 
         self.setupUi(self)
@@ -419,7 +429,15 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             'contextFindOffset',
             'Find offset')
         self._findOffset.triggered.connect(self.find_offset_cb)
+
+        self._findOffsetAgain = create_action(
+            self,
+            'contextFindOffsetAgain',
+            'Find again')
+        self._findOffsetAgain.triggered.connect(self.find_offset_again_cb)
+
         self.hex_2.addAction(self._findOffset)
+        self.hex_2.addAction(self._findOffsetAgain)
         self.hex_2.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
 
         # Connect signals to slots
@@ -453,6 +471,45 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self._hexeditdatareader = None
         self._tags = []
 
+        if filename is not None:
+            self.load_file(filename)
+
+        if tagfile is not None:
+            self.load_tags(tagfile)
+
+    def load_file(self, filename):
+        self._hexeditdata = QHexEditData.fromFile(filename)
+        self._hexeditdatareader = QHexEditDataReader(
+            self._hexeditdata,
+            self)
+        self.hex_1.setData(self._hexeditdata)
+        self.hex_2.setData(self._hexeditdata)
+
+    def load_tags(self, tagfile):
+        load_file = open(tagfile)
+        tags = yaml.safe_load(load_file)
+        load_file.close()
+        self._tags = []
+        for tag in tags:
+            print(tag)
+            new_tag = Tag(**tag)
+            print(new_tag)
+
+            # Store it
+            self._tags.append(new_tag)
+
+            # Colour it
+            self.hex_1.highlightBackground(
+                new_tag.start,
+                new_tag.end,
+                ROLECOLOURS[new_tag.role])
+
+            # Comment it
+            self.hex_1.commentRange(
+                new_tag.start,
+                new_tag.end,
+                new_tag.name)
+
     def create_tag(self, **kwargs):
         pass
 
@@ -468,12 +525,13 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             directory='.',
             filter='All files (*)')
         if filename[0] != '':
-            self._hexeditdata = QHexEditData.fromFile(filename[0])
-            self._hexeditdatareader = QHexEditDataReader(
-                self._hexeditdata,
-                self)
-            self.hex_1.setData(self._hexeditdata)
-            self.hex_2.setData(self._hexeditdata)
+            self.load_file(filename[0])
+            # self._hexeditdata = QHexEditData.fromFile(filename[0])
+            # self._hexeditdatareader = QHexEditDataReader(
+            #     self._hexeditdata,
+            #     self)
+            # self.hex_1.setData(self._hexeditdata)
+            # self.hex_2.setData(self._hexeditdata)
 
     @QtCore.pyqtSlot()
     def on_actionLoadTags_triggered(self):
@@ -484,30 +542,30 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             directory='.',
             filter='YAML files (*.yaml);;All files (*)')
         if filename[0] != '':
-            load_file = open(filename[0])
-            tags = yaml.safe_load(load_file)
-            load_file.close()
-            self._tags = []
-            for tag in tags:
-                print(tag)
-                new_tag = Tag(**tag)
-                print(new_tag)
+            self.load_tags(filename[0])
+            # load_file = open(filename[0])
+            # tags = yaml.safe_load(load_file)
+            # load_file.close()
+            # self._tags = []
+            # for tag in tags:
+            #     print(tag)
+            #     new_tag = Tag(**tag)
+            #     print(new_tag)
 
-                # Store it
-                self._tags.append(new_tag)
+            #     # Store it
+            #     self._tags.append(new_tag)
 
-                # Colour it
-                self.hex_1.highlightBackground(
-                    new_tag.start,
-                    new_tag.end,
-                    TYPECOLOURS[new_tag.type])
+            #     # Colour it
+            #     self.hex_1.highlightBackground(
+            #         new_tag.start,
+            #         new_tag.end,
+            #         ROLECOLOURS[new_tag.role])
 
-                # Comment it
-                self.hex_1.commentRange(
-                    new_tag.start,
-                    new_tag.end,
-                    new_tag.name)
-
+            #     # Comment it
+            #     self.hex_1.commentRange(
+            #         new_tag.start,
+            #         new_tag.end,
+            #         new_tag.name)
 
     @QtCore.pyqtSlot()
     def on_actionSaveTags_triggered(self):
@@ -557,7 +615,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 self.hex_1.highlightBackground(
                     new_tag.start,
                     new_tag.end,
-                    TYPECOLOURS[new_tag.type])
+                    ROLECOLOURS[new_tag.role])
 
                 # Comment it
                 self.hex_1.commentRange(
@@ -622,6 +680,19 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 signed=False)
             found_pos = self._hexeditdatareader.indexOf(current_pos, 0)
             if found_pos > 0:
+                self._foundPos = found_pos
+                self.hex_1.show_search_result(found_pos, length)
+
+    def find_offset_again_cb(self):
+        if self._hexeditdatareader is not None:
+            length = 4
+            current_pos = self.hex_2.cursorPos().to_bytes(
+                length,
+                sys.byteorder,
+                signed=False)
+            found_pos = self._hexeditdatareader.indexOf(current_pos, self._foundPos)
+            if found_pos > 0:
+                self._foundPos = found_pos
                 self.hex_1.show_search_result(found_pos, length)
 
     def closeEvent(self, event):
@@ -654,16 +725,20 @@ Licensed under GPL v3.0.\nhttp://www.gnu.org/licenses/'''
             '-i',
             '--in',
             dest="infile",
+            default=None,
             metavar='FILE',
             help='the input file')
 
+        parser.add_argument(
+            '-t',
+            '--tag',
+            dest="tagfile",
+            default=None,
+            metavar='FILE',
+            help='the tag file')
+
         # process options
         args = parser.parse_args()
-
-        if args.infile:
-            print("infile = %s" % args.infile)
-
-        # MAIN BODY #
 
     except Exception as e:
         indent = len(program_name) * " "
@@ -672,7 +747,7 @@ Licensed under GPL v3.0.\nhttp://www.gnu.org/licenses/'''
         return 2
 
     app = QtWidgets.QApplication(sys.argv)
-    main_window = MainWindow()
+    main_window = MainWindow(filename=args.infile, tagfile=args.tagfile)
     main_window.show()
     sys.exit(app.exec_())
 
