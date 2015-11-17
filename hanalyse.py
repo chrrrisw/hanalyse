@@ -119,6 +119,15 @@ ROLECOLOURS = {
     TagRoles.Unknown: QtGui.QColor.fromHsv(180, 127, 255),
 }
 
+TAG_LABEL_ORDER = {
+    0: ('Name', 'name'),
+    1: ('Start', 'start'),
+    2: ('End', 'end'),
+    3: ('Type', 'type'),
+    4: ('Role', 'role'),
+    5: ('Comment', 'comment'),
+}
+
 
 class Tag(object):
     ''' The Tag object is used to hold the metadata associated with a sequence
@@ -297,6 +306,216 @@ class TagDumper(
 HIGHLIGHT_COLOUR = QtGui.QColor(255, 0, 0)
 
 
+class TagModel(QtCore.QAbstractTableModel):
+
+    def __init__(self, parent, orientation, label_order):
+        super(TagModel, self).__init__(parent)
+        self._orientation = orientation
+        self._label_order = label_order
+        self._tags = []
+
+    @property
+    def orientation(self):
+        return self._orientation
+
+    @property
+    def label_order(self):
+        return self._label_order
+
+    @property
+    def tags(self):
+        return self._tags
+
+    def rowCount(self, parent=QtCore.QModelIndex()):
+        if parent.isValid():
+            return 0
+        else:
+            if self._orientation == QtCore.Qt.Horizontal:
+                return len(self._tags)
+            else:
+                return len(self._label_order)
+
+    def columnCount(self, parent=QtCore.QModelIndex()):
+        if parent.isValid():
+            return 0
+        else:
+            if self._orientation == QtCore.Qt.Horizontal:
+                return len(self._label_order)
+            else:
+                return len(self._tags)
+
+    def data(self, index, role=QtCore.Qt.DisplayRole):
+        if not index.isValid():
+            return None
+        elif not 0 <= index.row() < self.rowCount():
+            return None
+        elif not 0 <= index.column() < self.columnCount():
+            return None
+        elif not (
+                (role == QtCore.Qt.DisplayRole) or
+                (role == QtCore.Qt.EditRole)):
+            return None
+
+        if self._orientation == QtCore.Qt.Horizontal:
+            # Row is item, column is key
+            item_number = index.row()
+            key = self._label_order[index.column()][1]
+        else:
+            # Row is key, column is item
+            item_number = index.column()
+            key = self._label_order[index.row()][1]
+
+        attr_val = getattr(self._tags[item_number], key, None)
+        if ((type(attr_val) == TagTypes) or (type(attr_val) == TagRoles)):
+            attr_val = attr_val.name
+        return attr_val
+
+    def headerData(self, section, orientation, role=QtCore.Qt.DisplayRole):
+        if role != QtCore.Qt.DisplayRole:
+            return None
+        if orientation != self._orientation:
+            return None
+        return self._label_order[section][0]
+
+    def setData(self, index, value, role=QtCore.Qt.EditRole):
+        if not index.isValid():
+            return False
+        elif not 0 <= index.row() < self.rowCount():
+            return False
+        elif not 0 <= index.column() < self.columnCount():
+            return False
+        elif role != QtCore.Qt.EditRole:
+            return False
+
+        if self._orientation == QtCore.Qt.Horizontal:
+            # row is item, column is key
+            item_number = index.row()
+            key = self._label_order[index.column()][1]
+        else:
+            # row is key, column is item
+            item_number = index.column()
+            key = self._label_order[index.row()][1]
+
+        setattr(self._tags[item_number], key, value)
+        self.dataChanged.emit(index, index)
+        return True
+
+    # def setHeaderData(
+    #         self,
+    #         section,
+    #         orientation,
+    #         value,
+    #         role=QtCore.Qt.EditRole):
+    #     pass
+
+    def flags(self, index):
+        return QtCore.Qt.ItemIsSelectable | \
+            QtCore.Qt.ItemIsEditable | \
+            QtCore.Qt.ItemIsEnabled
+
+    def insertRows(self, row, count=1, parent=QtCore.QModelIndex()):
+        success = False
+        if self._orientation == QtCore.Qt.Horizontal:
+            # Adding new items
+            if 0 <= row <= len(self._tags):
+                self.beginInsertRows(parent, row, row + count - 1)
+                for c in range(count):
+                    self._tags.insert(row + c, None)
+                self.endInsertRows()
+                success = True
+        else:
+            # Adding new labels
+            if 0 <= row <= len(self._label_order):
+                self.beginInsertRows(parent, row, row + count - 1)
+                self.endInsertRows()
+                success = True
+        return success
+
+    def removeRows(self, row, count=1, parent=QtCore.QModelIndex()):
+        success = False
+        if self._orientation == QtCore.Qt.Horizontal:
+            # Removing items
+            if row + count <= len(self._tags):
+                self.beginRemoveRows(parent, row, row + count - 1)
+                del self._tags[row:row + count]
+                self.endRemoveRows()
+                success = True
+        else:
+            # Removing labels
+            if row + count <= len(self._label_order):
+                self.beginRemoveRows(parent, row, row + count - 1)
+                self.endRemoveRows()
+                success = True
+        return success
+
+    def insertColumns(self, column, count=1, parent=QtCore.QModelIndex()):
+        success = False
+        if self._orientation == QtCore.Qt.Horizontal:
+            # Adding new labels
+            if 0 <= column <= len(self._label_order):
+                self.beginInsertColumns(parent, column, column + count - 1)
+                self.endInsertColumns()
+                success = True
+        else:
+            # Adding new items
+            if 0 <= column <= len(self._tags):
+                self.beginInsertColumns(parent, column, column + count - 1)
+                for c in range(count):
+                    self._tags.insert(column + c, None)
+                self.endInsertColumns()
+                success = True
+        return success
+
+    def removeColumns(self, column, count=1, parent=QtCore.QModelIndex()):
+        success = False
+        if self._orientation == QtCore.Qt.Horizontal:
+            # Removing labels
+            if column + count <= len(self._label_order):
+                self.beginRemoveColumns(parent, column, column + count - 1)
+                self.endRemoveColumns()
+                success = True
+        else:
+            # Removing items
+            if column + count <= len(self._tags):
+                self.beginRemoveColumns(parent, column, column + count - 1)
+                del self._tags[column:column + count]
+                self.endRemoveColumns()
+                success = True
+        return success
+
+    def clear_rows(self):
+        self.removeRows(0, self.rowCount())
+
+    def clear_columns(self):
+        self.removeColumns(0, self.columnCount())
+
+    def append_tag(self, tag):
+        try:
+            if self._orientation == QtCore.Qt.Horizontal:
+                position = self.rowCount()
+                self.insertRows(position)
+                top_left = self.index(position, 0, QtCore.QModelIndex())
+                bottom_right = self.index(
+                    position,
+                    len(self._label_order) - 1,
+                    QtCore.QModelIndex())
+            else:
+                position = self.columnCount()
+                self.insertColumns(position)
+                top_left = self.index(0, position, QtCore.QModelIndex())
+                bottom_right = self.index(
+                    len(self._label_order) - 1,
+                    position,
+                    QtCore.QModelIndex())
+
+            # self._tags[position].update(tag)
+            self._tags[position] = tag
+            self.dataChanged.emit(top_left, bottom_right)
+
+        except Exception as err:
+            raise err
+
+
 class MainHexEdit(QHexEdit):
     '''MainHexEdit is the widget that appears on the left hand side of the
     window. It provides the primary view of the data with all highlighing.'''
@@ -442,6 +661,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
         # Connect signals to slots
         self.hex_1.show_offset.connect(self.hex_2.setCursorPos)
+        self.hex_1.positionChanged.connect(self.hex_1_position_changed)
+        self.hex_1.selectionChanged.connect(self.hex_1_selection_changed)
 
         # Dialogs
         self._tag_dialog = QtWidgets.QDialog(self)
@@ -464,18 +685,87 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 tag_role.value,
                 QtCore.QCoreApplication.translate(
                     self.objectName(), tag_role.name))
-        self._tag_contents.typeComboBox.currentIndexChanged['QString'].connect(self.on_typeComboBox_currentIndexChanged)
+        self._tag_contents.typeComboBox.currentIndexChanged['QString'].connect(
+            self.on_typeComboBox_currentIndexChanged)
+
+        # Tag Model
+        self._tag_model = TagModel(
+            parent=self,
+            orientation=QtCore.Qt.Horizontal,
+            label_order=TAG_LABEL_ORDER)
+        # self._tag_model.entrySelected.connect(self.tag_selected)
+        # self._tag_model.dataChanged.connect(self.tag_edited)
+
+        self.tagTableView.setModel(self._tag_model)
+        self.tagTableView.resizeColumnsToContents()
+        self.tagTableView.setSelectionMode(
+            QtWidgets.QTableView.SingleSelection)
+        self.tagTableView.setSelectionBehavior(
+            QtWidgets.QTableView.SelectRows)
+
+        self._tag_selection = self.tagTableView.selectionModel()
+        self._tag_selection.selectionChanged.connect(
+            self.tag_model_selection_changed)
+        # self._tag_selection.currentChanged.connect(
+        #     self.tag_model_current_changed)
 
         # Internal stuff
+        self.programmatic_change = False
         self._hexeditdata = None
         self._hexeditdatareader = None
-        self._tags = []
+        # self._tags = []
 
         if filename is not None:
             self.load_file(filename)
 
         if tagfile is not None:
             self.load_tags(tagfile)
+
+    def tag_model_current_changed(self, current, previous):
+        '''Called on _tag_selection currentChanged signal'''
+        if not self.programmatic_change:
+            current_tag = self._tag_model.tags[current.row()]
+            # print(current_tag.name)
+            self.hex_1.setSelection(current_tag.start, current_tag.end)
+
+    def tag_model_selection_changed(self, selected, deselected):
+        '''Called on _tag_selection selectionChanged signal'''
+        if not self.programmatic_change:
+            # Hopefully not more than one.
+            for sel in selected.indexes():
+                current_tag = self._tag_model.tags[sel.row()]
+                self.hex_1.setSelection(current_tag.start, current_tag.end)
+
+    def hex_1_position_changed(self, offset):
+        # TODO: Can we expose this through the hexedit widget?
+        found = False
+        row = 0
+        for tag in self._tag_model.tags:
+            if offset in range(tag.start, tag.end + 1):
+                found = True
+                self.programmatic_change = True
+                # self._tag_selection.setCurrentIndex(
+                #     self._tag_model.index(row, 0),
+                #     QtCore.QItemSelectionModel.ClearAndSelect |
+                #     QtCore.QItemSelectionModel.Rows)
+                self._tag_selection.select(
+                    self._tag_model.index(row, 0),
+                    QtCore.QItemSelectionModel.Clear |
+                    QtCore.QItemSelectionModel.Current |
+                    QtCore.QItemSelectionModel.Select |
+                    QtCore.QItemSelectionModel.Rows)
+                self.programmatic_change = False
+                self.tagTableView.scrollTo(self._tag_model.index(row, 0))
+            row += 1
+
+        if not found:
+            # Clear selection
+            self.programmatic_change = True
+            self._tag_selection.clearSelection()
+            self.programmatic_change = False
+
+    def hex_1_selection_changed(self, length):
+        pass
 
     def load_file(self, filename):
         self._hexeditdata = QHexEditData.fromFile(filename)
@@ -489,14 +779,18 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         load_file = open(tagfile)
         tags = yaml.safe_load(load_file)
         load_file.close()
-        self._tags = []
+
+        # self._tags = []
+        self._tag_model.clear_rows()
+
         for tag in tags:
-            print(tag)
+            # print(tag)
             new_tag = Tag(**tag)
-            print(new_tag)
+            # print(new_tag)
 
             # Store it
-            self._tags.append(new_tag)
+            # self._tags.append(new_tag)
+            self._tag_model.append_tag(new_tag)
 
             # Colour it
             self.hex_1.highlightBackground(
@@ -518,7 +812,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
     @QtCore.pyqtSlot()
     def on_actionOpen_triggered(self):
-        print('on_actionOpen_triggered')
+        # print('on_actionOpen_triggered')
         filename = QtWidgets.QFileDialog.getOpenFileName(
             parent=self,
             caption='Load File',
@@ -526,16 +820,10 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             filter='All files (*)')
         if filename[0] != '':
             self.load_file(filename[0])
-            # self._hexeditdata = QHexEditData.fromFile(filename[0])
-            # self._hexeditdatareader = QHexEditDataReader(
-            #     self._hexeditdata,
-            #     self)
-            # self.hex_1.setData(self._hexeditdata)
-            # self.hex_2.setData(self._hexeditdata)
 
     @QtCore.pyqtSlot()
     def on_actionLoadTags_triggered(self):
-        print('on_actionLoadTags_triggered')
+        # print('on_actionLoadTags_triggered')
         filename = QtWidgets.QFileDialog.getOpenFileName(
             parent=self,
             caption='Load File',
@@ -543,33 +831,10 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             filter='YAML files (*.yaml);;All files (*)')
         if filename[0] != '':
             self.load_tags(filename[0])
-            # load_file = open(filename[0])
-            # tags = yaml.safe_load(load_file)
-            # load_file.close()
-            # self._tags = []
-            # for tag in tags:
-            #     print(tag)
-            #     new_tag = Tag(**tag)
-            #     print(new_tag)
-
-            #     # Store it
-            #     self._tags.append(new_tag)
-
-            #     # Colour it
-            #     self.hex_1.highlightBackground(
-            #         new_tag.start,
-            #         new_tag.end,
-            #         ROLECOLOURS[new_tag.role])
-
-            #     # Comment it
-            #     self.hex_1.commentRange(
-            #         new_tag.start,
-            #         new_tag.end,
-            #         new_tag.name)
 
     @QtCore.pyqtSlot()
     def on_actionSaveTags_triggered(self):
-        print('on_actionSaveTags_triggered')
+        # print('on_actionSaveTags_triggered')
         filename = QtWidgets.QFileDialog.getSaveFileName(
             parent=self,
             caption='Load File',
@@ -577,7 +842,10 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             filter='YAML files (*.yaml)')
         if filename[0] != '':
             save_file = open(filename[0], 'w')
-            yaml.dump(self._tags, save_file, Dumper=TagDumper)
+
+            # yaml.dump(self._tags, save_file, Dumper=TagDumper)
+            yaml.dump(self._tag_model.tags, save_file, Dumper=TagDumper)
+
             save_file.close()
 
     @QtCore.pyqtSlot()
@@ -601,7 +869,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                     )
 
                 # Store it
-                self._tags.append(new_tag)
+                # self._tags.append(new_tag)
+                self._tag_model.append_tag(new_tag)
 
                 if new_tag.role == TagRoles.Count:
                     # Add it to the count combobox
@@ -625,7 +894,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
     @QtCore.pyqtSlot()
     def on_actionQuit_triggered(self):
-        print('on_actionQuit_triggered')
+        # print('on_actionQuit_triggered')
         self.close()
 
     @QtCore.pyqtSlot(bool)
@@ -644,7 +913,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
     @QtCore.pyqtSlot('QString')
     def on_typeComboBox_currentIndexChanged(self, text):
-        print('on_typeComboBox_currentIndexChanged', text)
+        # print('on_typeComboBox_currentIndexChanged', text)
         if text == 'Array':
             self._tag_contents.of_combobox.setEnabled(True)
             self._tag_contents.of_label.setEnabled(True)
@@ -690,7 +959,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 length,
                 sys.byteorder,
                 signed=False)
-            found_pos = self._hexeditdatareader.indexOf(current_pos, self._foundPos)
+            found_pos = self._hexeditdatareader.indexOf(
+                current_pos, self._foundPos)
             if found_pos > 0:
                 self._foundPos = found_pos
                 self.hex_1.show_search_result(found_pos, length)
