@@ -2,5 +2,5 @@ ui_%.py: %.ui
 	pyuic5 $< > $@
 
 ui: \
-	ui_mainwindow.py \
-	ui_tagdialog.py
+	hanalyse/ui_mainwindow.py \
+	hanalyse/ui_tagdialog.py

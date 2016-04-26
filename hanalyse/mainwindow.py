@@ -4,11 +4,10 @@ from PyQt5 import QtWidgets, QtGui, QtCore
 from QHexEdit import QHexEditData, QHexEditDataReader
 
 # Generated code
-from ui_mainwindow import Ui_MainWindow
-from ui_tagdialog import Ui_Tag
+from .ui_mainwindow import Ui_MainWindow
+from .ui_tagdialog import Ui_Tag
 
 from .hexes import MainHexEdit, SlaveHexEdit
-from .utilities import create_action
 from .tags import TagTypes, TagRoles, Tag, TagModel
 
 # TODO: Indicate on hex_2 when offset selected on hex_1
@@ -60,6 +59,8 @@ ROLECOLOURS = {
     TagRoles.Unknown: QtGui.QColor.fromHsv(180, 127, 255),
 }
 
+__all__ = ['MainWindow']
+
 
 class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
@@ -77,51 +78,17 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         # Create a layout and hexedit widget
         layout_2 = QtWidgets.QHBoxLayout()
         self.frame_2.setLayout(layout_2)
-        self.hex_2 = SlaveHexEdit(parent=self.frame_2)
+        self.hex_2 = SlaveHexEdit(
+            parent=self.frame_2,
+            on_find=self.find_offset_cb,
+            on_find_again=self.find_offset_again_cb)
         layout_2.addWidget(self.hex_2)
 
-        # Create context menu in hex 1
-        self._tagAction = create_action(
-            self,
-            "contextTag",
-            "Tag")
-        self._tagAction.triggered.connect(self.on_actionTag_triggered)
-
-        self._absOffsetAction = create_action(
-            self,
-            'contextAbsOffset',
-            'Show absolute offset')
-        self._absOffsetAction.triggered.connect(self.show_abs_offset_cb)
-
-        self._relOffsetAction = create_action(
-            self,
-            'contextRelOffset',
-            'Show relative offset')
-        self._relOffsetAction.triggered.connect(self.show_rel_offset_cb)
-
-        self.hex_1.addAction(self._tagAction)
-        self.hex_1.addAction(self._absOffsetAction)
-        self.hex_1.addAction(self._relOffsetAction)
-        self.hex_1.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
-
-        # Create context menu in hex 2
-        self._findOffset = create_action(
-            self,
-            'contextFindOffset',
-            'Find offset')
-        self._findOffset.triggered.connect(self.find_offset_cb)
-
-        self._findOffsetAgain = create_action(
-            self,
-            'contextFindOffsetAgain',
-            'Find again')
-        self._findOffsetAgain.triggered.connect(self.find_offset_again_cb)
-
-        self.hex_2.addAction(self._findOffset)
-        self.hex_2.addAction(self._findOffsetAgain)
-        self.hex_2.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
-
         # Connect signals to slots
+        self.hex_1.createTag.connect(self.on_create_tag)
+        self.hex_1.absoluteOffset.connect(self.on_absolute_offset)
+        self.hex_1.relativeOffset.connect(self.on_relative_offset)
+
         self.hex_1.show_offset.connect(self.hex_2.setCursorPos)
         self.hex_1.positionChanged.connect(self.hex_1_position_changed)
         self.hex_1.selectionChanged.connect(self.hex_1_selection_changed)
@@ -156,7 +123,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             orientation=QtCore.Qt.Horizontal,
             label_order=TAG_LABEL_ORDER)
         # self._tag_model.entrySelected.connect(self.tag_selected)
-        # self._tag_model.dataChanged.connect(self.tag_edited)
+        self._tag_model.dataChanged.connect(self.tag_edited)
 
         self.tagTableView.setModel(self._tag_model)
         self.tagTableView.resizeColumnsToContents()
@@ -183,12 +150,22 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         if tagfile is not None:
             self.load_tags(tagfile)
 
-    def tag_model_current_changed(self, current, previous):
-        '''Called on _tag_selection currentChanged signal'''
+    def tag_edited(self, top_left, bottom_right):
         if not self.programmatic_change:
-            current_tag = self._tag_model.tags[current.row()]
-            # print(current_tag.name)
-            self.hex_1.setSelection(current_tag.start, current_tag.end)
+            if (top_left.row() != bottom_right.row()) or (top_left.column() != bottom_right.column()):
+                raise Exception('Rows and columns differ!')
+            else:
+                row = top_left.row()
+                column = top_left.column()
+
+                print('Tag {} edited on row {}'.format(TAG_LABEL_ORDER[column][0], row))
+
+    # def tag_model_current_changed(self, current, previous):
+    #     '''Called on _tag_selection currentChanged signal'''
+    #     if not self.programmatic_change:
+    #         current_tag = self._tag_model.tags[current.row()]
+    #         # print(current_tag.name)
+    #         self.hex_1.setSelection(current_tag.start, current_tag.end)
 
     def tag_model_selection_changed(self, selected, deselected):
         '''Called on _tag_selection selectionChanged signal'''
@@ -196,7 +173,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             # Hopefully not more than one.
             for sel in selected.indexes():
                 current_tag = self._tag_model.tags[sel.row()]
-                self.hex_1.setSelection(current_tag.start, current_tag.end)
+                if self._hexeditdata is not None:
+                    self.hex_1.setSelection(current_tag.start, current_tag.end)
 
     def hex_1_position_changed(self, offset):
         # TODO: Can we expose this through the hexedit widget?
@@ -230,16 +208,23 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         pass
 
     def load_file(self, filename):
+        '''Load data from file and put it in the hex editors.'''
         self._hexeditdata = QHexEditData.fromFile(filename)
         self._hexeditdatareader = QHexEditDataReader(
             self._hexeditdata,
             self)
         self.hex_1.setData(self._hexeditdata)
+        self.hex_1.set_data_reader(self._hexeditdatareader)
         self.hex_2.setData(self._hexeditdata)
+        self.hex_2.set_data_reader(self._hexeditdatareader)
 
     def load_tags(self, tagfile):
 
+        self.programmatic_change = True
         self._tag_model.read_from_file(tagfile)
+        self.programmatic_change = False
+
+        self.tagTableView.resizeColumnsToContents()
 
         for tag in self._tag_model.tags:
 
@@ -294,14 +279,14 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         if filename[0] != '':
             self._tag_model.write_to_file(filename[0])
 
-    @QtCore.pyqtSlot()
-    def on_actionTag_triggered(self):
+    @QtCore.pyqtSlot('qint64', 'qint64')
+    def on_create_tag(self, start, end):
         if self._hexeditdatareader is not None:
             # TODO: Should we get the temp highlight instead of selection?
             self._tag_contents.extents_start_lineedit.setText(
-                '0x{:08x}'.format(self.hex_1.selectionStart()))
+                '0x{:08x}'.format(start))
             self._tag_contents.extents_end_lineedit.setText(
-                '0x{:08x}'.format(self.hex_1.selectionEnd()))
+                '0x{:08x}'.format(end))
             result = self._tag_dialog.exec_()
 
             if result:
@@ -371,17 +356,15 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self._tag_contents.countComboBox.setEnabled(False)
             self._tag_contents.count_label.setEnabled(False)
 
-    def show_abs_offset_cb(self):
+    @QtCore.pyqtSlot('qint64', 'qint64', 'qint64')
+    def on_absolute_offset(self, start, length, offset):
+        '''Read the selected data in hex_1, set cursor position in hex_2'''
         if self._hexeditdatareader is not None:
-            sel_start = self.hex_1.selectionStart()
-            sel_length = self.hex_1.selectionLength()
-            data = self._hexeditdatareader.read(sel_start, sel_length + 1)
-            # print(data)
-            offset = int.from_bytes(data, sys.byteorder, signed=False)
             self.hex_2.setCursorPos(offset)
 
-    def show_rel_offset_cb(self):
-        pass
+    @QtCore.pyqtSlot('qint64', 'qint64', 'qint64')
+    def on_relative_offset(self, start, length, offset):
+        print('Not yet implemented')
 
     def allow_close(self):
         return True
@@ -416,5 +399,3 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             event.accept()
         else:
             event.ignore()
-
-
