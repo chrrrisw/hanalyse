@@ -301,7 +301,9 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
                 # Store it
                 # self._tags.append(new_tag)
+                self.programmatic_change = True
                 self._tag_model.append_tag(new_tag)
+                self.programmatic_change = False
 
                 if new_tag.role == TagRoles.Count:
                     # Add it to the count combobox
