@@ -105,7 +105,10 @@ class Tag(object):
     @type.setter
     def type(self, value):
         if type(value) == str:
-            value = TagTypes[value]
+            try:
+                value = TagTypes[value]
+            except KeyError:
+                print('Using string for type')
         self._type = value
 
     @property
@@ -116,7 +119,10 @@ class Tag(object):
     @role.setter
     def role(self, value):
         if type(value) == str:
-            value = TagRoles[value]
+            try:
+                value = TagRoles[value]
+            except KeyError:
+                print('Using string for role')
         self._role = value
 
     @property
@@ -171,7 +177,7 @@ class TagRepresenter(yaml.representer.SafeRepresenter):
             ('type', data.type.name),
             ('role', data.role.name),
             ('comment', data.comment),
-            ]
+        ]
         return self.represent_mapping('tag:yaml.org,2002:map', d)
 
     def represent_tag_enum(self, data):
